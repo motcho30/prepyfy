@@ -22,27 +22,54 @@ const nextConfig = {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
+    serverActions: {
+      bodySizeLimit: '4mb',
+    },
+  },
+  // Add Netlify specific configuration
+  serverRuntimeConfig: {
+    // Will only be available on the server side
+    timeoutSeconds: 60, // Increase timeout to 60 seconds
   },
 }
 
-mergeConfig(nextConfig, userConfig)
-
-function mergeConfig(nextConfig, userConfig) {
-  if (!userConfig) {
-    return
+// Properly merge user config
+if (userConfig && userConfig.default) {
+  const userConfigData = userConfig.default;
+  
+  // Merge experimental options
+  if (userConfigData.experimental) {
+    nextConfig.experimental = {
+      ...nextConfig.experimental,
+      ...userConfigData.experimental,
+    };
   }
-
-  for (const key in userConfig) {
+  
+  // Merge serverRuntimeConfig
+  if (userConfigData.serverRuntimeConfig) {
+    nextConfig.serverRuntimeConfig = {
+      ...nextConfig.serverRuntimeConfig,
+      ...userConfigData.serverRuntimeConfig,
+    };
+  }
+  
+  // Merge other top-level options
+  for (const key in userConfigData) {
     if (
+      key !== 'experimental' && 
+      key !== 'serverRuntimeConfig' &&
       typeof nextConfig[key] === 'object' &&
       !Array.isArray(nextConfig[key])
     ) {
       nextConfig[key] = {
         ...nextConfig[key],
-        ...userConfig[key],
-      }
-    } else {
-      nextConfig[key] = userConfig[key]
+        ...userConfigData[key],
+      };
+    } else if (
+      key !== 'experimental' && 
+      key !== 'serverRuntimeConfig'
+    ) {
+      nextConfig[key] = userConfigData[key];
     }
   }
 }

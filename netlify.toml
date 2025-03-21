@@ -3,4 +3,13 @@
   publish = ".next"
 
 [[plugins]]
-  package = "@netlify/plugin-nextjs" 
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  # Increase the timeout for all functions (default is 10 seconds)
+  node_bundler = "esbuild"
+  timeout = 60
+
+[build.environment]
+  # Ensure Next.js knows it's running on Netlify
+  NETLIFY = "true" 
