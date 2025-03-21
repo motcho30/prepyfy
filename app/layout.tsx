@@ -41,6 +41,25 @@ export default function RootLayout({
         >
           {children}
         </ThemeProvider>
+        
+        {/* Add Netlify script for enhanced function capabilities */}
+        <script 
+          dangerouslySetInnerHTML={{ 
+            __html: `
+              // Helper function to detect and report Netlify function errors
+              window.addEventListener('error', function(e) {
+                if (e.message && (
+                  e.message.includes('unexpected response') || 
+                  e.message.includes('502') ||
+                  e.message.includes('function invocation failed')
+                )) {
+                  console.warn('Detected likely Netlify function error:', e);
+                  // Can add custom error reporting or UI handling here
+                }
+              });
+            `
+          }}
+        />
       </body>
     </html>
   )

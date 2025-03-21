@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
@@ -11,9 +11,15 @@ import { Card } from "@/components/ui/card"
 import { generateInterviewPrep } from "@/app/actions"
 import { InterviewPrepResults } from "@/components/interview-prep-results"
 import { EmailCollectionModal } from "@/components/email-collection-modal"
-import { Loader2, AlertCircle } from "lucide-react"
+import { Loader2, AlertCircle, RefreshCcw } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import { ApiErrorBoundary } from "@/components/api-error-boundary"
+
+// Maximum number of retries for API calls
+const MAX_RETRIES = 2;
+// Timeout for API calls (ms)
+const API_TIMEOUT = 55000;
 
 export function InterviewPrepForm() {
   const [jobDescription, setJobDescription] = useState("")
@@ -25,6 +31,7 @@ export function InterviewPrepForm() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingStage, setLoadingStage] = useState("")
+  const [retryCount, setRetryCount] = useState(0)
 
   // Function to simulate progress for better UX during long operations
   const simulateProgress = () => {
@@ -70,6 +77,46 @@ export function InterviewPrepForm() {
     return () => clearInterval(interval)
   }
 
+  // Function to generate interview prep with timeout and retry logic
+  const generateInterviewPrepWithRetry = useCallback(async (jobDesc: string, compUrl: string, retries = 0) => {
+    // Create a promise that rejects after timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      const id = setTimeout(() => {
+        clearTimeout(id);
+        reject(new Error("API request timed out. The server might be busy."));
+      }, API_TIMEOUT);
+    });
+
+    try {
+      // Race between the actual API call and the timeout
+      const result = await Promise.race([
+        generateInterviewPrep(jobDesc, compUrl),
+        timeoutPromise
+      ]) as any;
+
+      return result;
+    } catch (error: any) {
+      console.error(`API call failed (attempt ${retries + 1} of ${MAX_RETRIES + 1}):`, error);
+      
+      // If we have retries left and it's a server error (502, timeout, etc.)
+      if (
+        retries < MAX_RETRIES && 
+        (error.message?.includes("timeout") || 
+         error.message?.includes("502") ||
+         error.message?.includes("unexpected response"))
+      ) {
+        setLoadingStage(`Retrying... (attempt ${retries + 2} of ${MAX_RETRIES + 1})`);
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Retry the API call
+        return generateInterviewPrepWithRetry(jobDesc, compUrl, retries + 1);
+      }
+      
+      // If we're out of retries or it's another type of error, throw it
+      throw error;
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -100,6 +147,7 @@ export function InterviewPrepForm() {
     try {
       setIsLoading(true)
       setError(null)
+      setRetryCount(0);
 
       // Start progress simulation
       const stopProgress = simulateProgress()
@@ -109,7 +157,8 @@ export function InterviewPrepForm() {
         companyUrl: companyUrl,
       })
 
-      const prepResults = await generateInterviewPrep(jobDescription, companyUrl)
+      // Use the retry-enabled function
+      const prepResults = await generateInterviewPrepWithRetry(jobDescription, companyUrl);
 
       // Stop progress simulation
       stopProgress()
@@ -132,10 +181,21 @@ export function InterviewPrepForm() {
       setShowEmailModal(true)
     } catch (err: any) {
       console.error("Error in form submission:", err)
-      setError(
-        err.message ||
-          "An unexpected error occurred. This might be due to high demand. Please try again in a few moments.",
-      )
+      
+      // Specific error message for 502 errors
+      if (err.message?.includes("502") || err.message?.includes("unexpected response")) {
+        setError(
+          "The server is experiencing high load or timeout issues. Please try a shorter job description or try again in a few moments."
+        );
+      } else {
+        setError(
+          err.message ||
+            "An unexpected error occurred. This might be due to high demand. Please try again in a few moments.",
+        );
+      }
+      
+      // Increment retry count
+      setRetryCount(prev => prev + 1);
     } finally {
       setIsLoading(false)
     }
@@ -171,6 +231,7 @@ export function InterviewPrepForm() {
     setJobDescription("")
     setCompanyUrl("")
     setLoadingProgress(0)
+    setRetryCount(0)
     
     // Remove the class to show the intro section again
     document.body.classList.remove('results-shown');
@@ -197,12 +258,24 @@ export function InterviewPrepForm() {
   }
 
   return (
-    <>
+    <ApiErrorBoundary>
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error}
+            {retryCount > 0 && (
+              <div className="mt-2">
+                <p className="text-sm">Suggestions:</p>
+                <ul className="text-sm list-disc pl-5 mt-1">
+                  <li>Try a shorter job description</li>
+                  <li>Check that your company URL is correct</li>
+                  <li>Wait a few minutes and try again</li>
+                </ul>
+              </div>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -220,6 +293,11 @@ export function InterviewPrepForm() {
             rows={6}
             className="resize-none bg-gray-50 border-gray-200 focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 rounded-md"
           />
+          {retryCount > 0 && (
+            <p className="text-xs text-amber-600">
+              Tip: If experiencing timeouts, try using a shorter job description (250-500 words).
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -263,10 +341,23 @@ export function InterviewPrepForm() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Generating your interview prep...
             </>
+          ) : retryCount > 0 ? (
+            <>
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Try Again
+            </>
           ) : (
             "Generate Interview Prep"
           )}
         </Button>
+        
+        {retryCount > 1 && (
+          <div className="text-center mt-4">
+            <p className="text-sm text-gray-600">
+              Still having issues? You might want to try again later when our servers are less busy.
+            </p>
+          </div>
+        )}
       </form>
 
       {showEmailModal && generatedResults && (
@@ -276,7 +367,7 @@ export function InterviewPrepForm() {
           roleCategory={generatedResults.roleCategory}
         />
       )}
-    </>
+    </ApiErrorBoundary>
   )
 }
 
