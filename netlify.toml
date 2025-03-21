@@ -6,10 +6,11 @@
   package = "@netlify/plugin-nextjs"
 
 [functions]
-  # Increase the timeout for all functions (default is 10 seconds)
+  # Specify the bundler for all functions
   node_bundler = "esbuild"
-  timeout = 60
 
 [build.environment]
   # Ensure Next.js knows it's running on Netlify
-  NETLIFY = "true" 
+  NETLIFY = "true"
+  # Set function timeout via environment variable
+  AWS_LAMBDA_FUNCTION_TIMEOUT = "60" 
