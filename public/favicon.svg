@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background gradient (purple to indigo) -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" /> <!-- Purple -->
+      <stop offset="100%" stop-color="#4F46E5" /> <!-- Indigo -->
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="10" y="10" width="80" height="80" rx="20" fill="url(#gradient)" />
+  
+  <!-- Letter "P" in white -->
+  <path d="M35 30 V 70 M35 30 H 55 C 65 30 65 50 55 50 H 35 M55 50 L 65 70" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg> 
