@@ -8,9 +8,14 @@
 [functions]
   # Specify the bundler for all functions
   node_bundler = "esbuild"
+  # Increase the function timeout
+  included_files = ["app/**"]
+  external_node_modules = ["@ai-sdk/openai"]
+  # Set higher timeout for all functions
+  timeout = 90
 
 [build.environment]
   # Ensure Next.js knows it's running on Netlify
   NETLIFY = "true"
   # Set function timeout via environment variable
-  AWS_LAMBDA_FUNCTION_TIMEOUT = "60" 
+  AWS_LAMBDA_FUNCTION_TIMEOUT = "90" 

@@ -17,9 +17,9 @@ import { Progress } from "@/components/ui/progress"
 import { ApiErrorBoundary } from "@/components/api-error-boundary"
 
 // Maximum number of retries for API calls
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 // Timeout for API calls (ms)
-const API_TIMEOUT = 55000;
+const API_TIMEOUT = 85000;
 
 export function InterviewPrepForm() {
   const [jobDescription, setJobDescription] = useState("")

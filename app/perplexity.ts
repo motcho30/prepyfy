@@ -58,73 +58,99 @@ export async function searchCompanyInfo(companyUrl: string) {
       console.log(`Trying Perplexity API with model: ${model}`)
 
       try {
-        // Execute both searches in parallel
-        const [websiteSearchResponse, companySearchResponse] = await Promise.all([
-          fetch("https://api.perplexity.ai/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are a thorough research assistant that explores websites in detail to find specific information. You always provide concrete details and examples, never generic statements.",
-                },
-                {
-                  role: "user",
-                  content: websiteSearchQuery,
-                },
-              ],
-              options: {
-                web_search: true,
+        // Set up AbortController for timeouts
+        const websiteController = new AbortController();
+        const companyController = new AbortController();
+        
+        // Create timeout for each fetch request
+        const websiteTimeout = setTimeout(() => websiteController.abort(), 75000);
+        const companyTimeout = setTimeout(() => companyController.abort(), 75000);
+        
+        try {
+          // Execute both searches in parallel
+          const [websiteSearchResponse, companySearchResponse] = await Promise.all([
+            fetch("https://api.perplexity.ai/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
               },
+              body: JSON.stringify({
+                model: model,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "You are a thorough research assistant that explores websites in detail to find specific information. You always provide concrete details and examples, never generic statements.",
+                  },
+                  {
+                    role: "user",
+                    content: websiteSearchQuery,
+                  },
+                ],
+                options: {
+                  web_search: true,
+                },
+              }),
+              signal: websiteController.signal,
             }),
-          }),
 
-          fetch("https://api.perplexity.ai/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are a thorough research assistant that provides detailed, specific information about companies based on the latest available information online. You always provide concrete details and examples, never generic statements.",
-                },
-                {
-                  role: "user",
-                  content: companySearchQuery,
-                },
-              ],
-              options: {
-                web_search: true,
+            fetch("https://api.perplexity.ai/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
               },
+              body: JSON.stringify({
+                model: model,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "You are a thorough research assistant that provides detailed, specific information about companies based on the latest available information online. You always provide concrete details and examples, never generic statements.",
+                  },
+                  {
+                    role: "user",
+                    content: companySearchQuery,
+                  },
+                ],
+                options: {
+                  web_search: true,
+                },
+              }),
+              signal: companyController.signal,
             }),
-          }),
-        ])
+          ]);
+          
+          // Clear timeouts if requests completed
+          clearTimeout(websiteTimeout);
+          clearTimeout(companyTimeout);
 
-        // Check if both responses are OK
-        if (websiteSearchResponse.ok && companySearchResponse.ok) {
-          websiteSearchData = await websiteSearchResponse.json()
-          companySearchData = await companySearchResponse.json()
+          // Check if both responses are OK
+          if (websiteSearchResponse.ok && companySearchResponse.ok) {
+            websiteSearchData = await websiteSearchResponse.json()
+            companySearchData = await companySearchResponse.json()
 
-          if (websiteSearchData.choices?.[0]?.message?.content && companySearchData.choices?.[0]?.message?.content) {
-            success = true
-            break // We found a working model
+            if (websiteSearchData.choices?.[0]?.message?.content && companySearchData.choices?.[0]?.message?.content) {
+              success = true
+              break // We found a working model
+            }
+          } else {
+            // Log the error response
+            const websiteErrorText = websiteSearchResponse.ok ? "" : await websiteSearchResponse.text()
+            const companyErrorText = companySearchResponse.ok ? "" : await companySearchResponse.text()
+            console.error(`Model ${model} failed:`, { websiteError: websiteErrorText, companyError: companyErrorText })
           }
-        } else {
-          // Log the error response
-          const websiteErrorText = websiteSearchResponse.ok ? "" : await websiteSearchResponse.text()
-          const companyErrorText = companySearchResponse.ok ? "" : await companySearchResponse.text()
-          console.error(`Model ${model} failed:`, { websiteError: websiteErrorText, companyError: companyErrorText })
+        } catch (fetchError: any) {
+          if (fetchError.name === 'AbortError') {
+            console.error(`Perplexity API request timed out with model ${model}`);
+          } else {
+            console.error(`Error with model ${model} fetch:`, fetchError);
+          }
+          
+          // Clean up timeouts
+          clearTimeout(websiteTimeout);
+          clearTimeout(companyTimeout);
         }
 
         // If we get here, this model didn't work, try the next one

@@ -1,8 +1,12 @@
 {
   "functions": {
     "app/actions.ts": {
-      "memory": 1024,
-      "maxDuration": 60
+      "memory": 2048,
+      "maxDuration": 90
+    },
+    "app/perplexity.ts": {
+      "memory": 2048,
+      "maxDuration": 90
     }
   }
 }
