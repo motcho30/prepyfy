@@ -19,7 +19,9 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [debugMode, setDebugMode] = useState(false) // For development/troubleshooting
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,8 +34,20 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
 
     setIsSubmitting(true)
     setError(null)
+    setErrorDetails(null)
 
     try {
+      // Add a timestamp to avoid caching issues
+      const timestamp = new Date().getTime();
+      // First check if Google Sheets is properly configured
+      const checkResponse = await fetch(`/api/test-sheets-connection?t=${timestamp}`);
+      const checkResult = await checkResponse.json();
+      
+      if (!checkResult.stages.sheetAccess) {
+        console.error("Google Sheets connection test failed:", checkResult);
+        throw new Error(`Google Sheets connection issue: ${checkResult.errors?.join(', ') || 'Unknown error'}`);
+      }
+
       const result = await saveEmailToSheet(email, roleCategory)
 
       if (result.success) {
@@ -47,11 +61,26 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
       }
     } catch (err: any) {
       console.error("Error saving email:", err)
-      setError(err.message || "An error occurred. Please try again.")
+      setError("Unable to save your email at this time")
+      setErrorDetails(err.message || "Unknown error")
+      
+      // Show detailed errors only in debug mode
+      if (process.env.NODE_ENV === "development") {
+        setDebugMode(true)
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
+  
+  // Function to skip email collection with debug info
+  const handleSkipWithDebug = () => {
+    // If in debug mode and there's an error, log it in the console
+    if (debugMode && errorDetails) {
+      console.log("Skipping with error details:", errorDetails);
+    }
+    onCancel();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -90,9 +119,16 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
                 className="bg-gray-50 border-gray-200 focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 rounded-md"
               />
               {error && (
-                <div className="flex items-center text-red-500 text-sm mt-1">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  {error}
+                <div className="flex items-start text-red-500 text-sm mt-1">
+                  <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
+                  <div>
+                    {error}
+                    {debugMode && errorDetails && (
+                      <div className="mt-1 p-2 bg-red-50 rounded text-xs text-red-800 font-mono overflow-auto max-h-20">
+                        {errorDetails}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               <p className="text-xs text-gray-500 mt-1">We'll send you interview tips tailored to this role.</p>
@@ -103,7 +139,7 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
                 type="button" 
                 variant="outline" 
                 className="border-gray-200 hover:bg-gray-50 text-gray-700" 
-                onClick={onCancel} 
+                onClick={handleSkipWithDebug}
                 disabled={isSubmitting}
               >
                 Skip
@@ -123,6 +159,23 @@ export function EmailCollectionModal({ onComplete, onCancel, roleCategory }: Ema
                 )}
               </Button>
             </div>
+            {process.env.NODE_ENV === "development" && (
+              <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400">
+                <button
+                  type="button"
+                  className="text-left underline"
+                  onClick={() => setDebugMode(!debugMode)}
+                >
+                  {debugMode ? "Hide Debug Info" : "Show Debug Info"}
+                </button>
+                {debugMode && (
+                  <div className="mt-2">
+                    <div>Environment: {process.env.NODE_ENV}</div>
+                    {errorDetails && <div className="mt-1">Last Error: {errorDetails}</div>}
+                  </div>
+                )}
+              </div>
+            )}
           </form>
         )}
       </div>
